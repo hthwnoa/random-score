@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#1e1b4b" />
+<title>随机和弦生成器 · 五线谱</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #e2e8f0;
+    background: radial-gradient(1200px 600px at 20% 0%, #312e81 0%, #1e1b4b 45%, #0f0d24 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    width: 100%;
+    max-width: 640px;
+    padding: 18px 16px 20px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 19px;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+  .hint {
+    margin: 0 0 14px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #a5b4fc;
+  }
+  .score {
+    width: 100%;
+    min-height: 170px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fffdf8, #f4f1e8);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+    -webkit-overflow-scrolling: touch;
+  }
+  .score svg { display: block; }
+  .buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  button {
+    flex: 1;
+    min-height: 48px;
+    padding: 12px 8px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: transform 0.1s ease, filter 0.15s ease;
+  }
+  button:active { transform: scale(0.97); filter: brightness(1.15); }
+  button:disabled { opacity: 0.5; }
+  #genBtn {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    box-shadow: 0 6px 18px rgba(99, 102, 241, 0.4);
+  }
+  #showBtn {
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    box-shadow: 0 6px 18px rgba(245, 158, 11, 0.35);
+  }
+  @media (max-width: 360px) {
+    .buttons { flex-direction: column; }
+  }
+  .answer {
+    margin-top: 16px;
+    padding: 4px 14px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    animation: fade 0.28s ease;
+  }
+  .answer.hidden { display: none; }
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+  }
+  .row:last-child { border-bottom: none; }
+  .k {
+    flex: 0 0 64px;
+    font-size: 12px;
+    color: #a5b4fc;
+    letter-spacing: 0.5px;
+  }
+  .v {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    word-break: break-word;
+  }
+  .v.big {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fde68a;
+  }
+  .err {
+    padding: 16px 18px;
+    color: #7f1d1d;
+    font-size: 11px;
+    line-height: 1.6;
+    text-align: left;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <h1>🎼 随机和弦生成器</h1>
+    <p class="hint">五线谱上随机给出一个三和弦或七和弦（含转位），先自己判断，再点开答案对照～</p>
+
+    <div id="score" class="score"></div>
+
+    <div class="buttons">
+      <button id="genBtn">🎲 换一个和弦</button>
+      <button id="showBtn">💡 显示和弦名称</button>
+    </div>
+
+    <div id="answer" class="answer hidden"></div>
+  </div>
+
+  <!--
+    ✅ 为 CommonJS 格式的 VexFlow 4.2.2 提供运行环境，
+       否则浏览器会因 exports is not defined 中断执行。
+  -->
+  <script>
+    window.exports = window.exports || {};
+    window.module = window.module || { exports: window.exports };
+  </script>
+  <script src="https://unpkg.com/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const scoreEl  = document.getElementById("score");
+    const answerEl = document.getElementById("answer");
+
+    // ---------- 多路兜底：找到 VexFlow API ----------
+    function findVexFlowAPI() {
+      const candidates = [];
+      if (typeof VexFlow !== "undefined" && VexFlow)             candidates.push(VexFlow);
+      if (typeof Vex !== "undefined" && Vex && Vex.Flow)         candidates.push(Vex.Flow);
+      if (window.VexFlow)                                        candidates.push(window.VexFlow);
+      if (window.Vex && window.Vex.Flow)                         candidates.push(window.Vex.Flow);
+      if (window.exports && window.exports.Renderer)             candidates.push(window.exports);
+      if (window.module && window.module.exports
+          && window.module.exports.Renderer)                     candidates.push(window.module.exports);
+      for (const obj of candidates) {
+        if (obj && typeof obj.Renderer === "function" && typeof obj.Stave === "function") {
+          return obj;
+        }
+      }
+      return null;
+    }
+
+    const VF = findVexFlowAPI();
+
+    if (!VF) {
+      scoreEl.innerHTML = '<pre class="err">VexFlow 加载失败。\n请打开浏览器控制台查看报错。</pre>';
+      document.getElementById("genBtn").disabled = true;
+      document.getElementById("showBtn").disabled = true;
+      return;
+    }
+
+    const { Renderer, Stave, StaveNote, Accidental, Voice, Formatter } = VF;
+
+    const LETTERS      = ["c", "d", "e", "f", "g", "a", "b"];
+    const LETTER_NAMES = ["C", "D", "E", "F", "G", "A", "B"];
+    const NATURAL      = [0, 2, 4, 5, 7, 9, 11];
+
+    const QUALITIES = [
+      { intervals: [0, 4, 7],     full: "大三和弦",   short: "",      alt: ""     },
+      { intervals: [0, 3, 7],     full: "小三和弦",   short: "m",     alt: ""     },
+      { intervals: [0, 3, 6],     full: "减三和弦",   short: "dim",   alt: "°"    },
+      { intervals: [0, 4, 8],     full: "增三和弦",   short: "aug",   alt: "+"    },
+      { intervals: [0, 4, 7, 11], full: "大七和弦",   short: "maj7",  alt: "Δ7"   },
+      { intervals: [0, 4, 7, 10], full: "属七和弦",   short: "7",     alt: ""     },
+      { intervals: [0, 3, 7, 10], full: "小七和弦",   short: "m7",    alt: ""     },
+      { intervals: [0, 3, 6, 10], full: "半减七和弦", short: "m7♭5",  alt: "ø7"   },
+      { intervals: [0, 3, 6, 9],  full: "减七和弦",   short: "dim7",  alt: "°7"   },
+      { intervals: [0, 3, 7, 11], full: "小大七和弦", short: "mMaj7", alt: "mΔ7"  }
+    ];
+
+    const randInt = (n) => Math.floor(Math.random() * n);
+
+    function accSymbol(v) {
+      if (v >= 2)  return "♯♯";
+      if (v === 1) return "♯";
+      if (v === -1) return "♭";
+      if (v <= -2) return "♭♭";
+      return "";
+    }
+    function accVex(v) {
+      if (v >= 2)  return "##";
+      if (v === 1) return "#";
+      if (v === -1) return "b";
+      if (v <= -2) return "bb";
+      return "";
+    }
+    const pitchOf = (li, acc, oct) => 12 * (oct + 1) + NATURAL[li] + acc;
+
+    let current = null;
+
+    // ---------- 随机生成和弦 ----------
+    function buildChord() {
+      for (let attempt = 0; attempt < 300; attempt++) {
+        const rootLetterIdx = randInt(7);
+        const rootAcc = [-1, 0, 1][randInt(3)];
+        const rootPitch = pitchOf(rootLetterIdx, rootAcc, 4);
+        if (rootPitch < 60 || rootPitch > 71) continue;
+
+        const quality = QUALITIES[randInt(QUALITIES.length)];
+        const notes = [];
+        let bad = false;
+
+        for (let k = 0; k < quality.intervals.length; k++) {
+          const iv = quality.intervals[k];
+          const li = (rootLetterIdx + 2 * k) % 7;
+          const target = rootPitch + iv;
+
+          let oct = Math.floor(target / 12) - 1;
+          let np = 12 * (oct + 1) + NATURAL[li];
+          let acc = target - np;
+
+          if (acc > 2) { oct++; np = 12 * (oct + 1) + NATURAL[li]; acc = target - np; }
+          if (acc < -2) { oct--; np = 12 * (oct + 1) + NATURAL[li]; acc = target - np; }
+          if (Math.abs(acc) > 2) { bad = true; break; }
+
+          notes.push({ letterIdx: li, acc, octave: oct });
+        }
+        if (bad) continue;
+
+        const inversion = randInt(notes.length);
+        for (let i = 0; i < inversion; i++) {
+          const lowest = notes.shift();
+          lowest.octave += 1;
+          notes.push(lowest);
+        }
+
+        const ps = notes.map((n) => pitchOf(n.letterIdx, n.acc, n.octave));
+        const hi = Math.max(...ps);
+        const lo = Math.min(...ps);
+        if (hi > 84)      notes.forEach((n) => (n.octave -= 1));
+        else if (lo < 55) notes.forEach((n) => (n.octave += 1));
+
+        current = { notes, quality, rootLetterIdx, rootAcc, inversion };
+        return;
+      }
+
+      current = {
+        notes: [
+          { letterIdx: 0, acc: 0, octave: 4 },
+          { letterIdx: 2, acc: 0, octave: 4 },
+          { letterIdx: 4, acc: 0, octave: 4 }
+        ],
+        quality: QUALITIES[0],
+        rootLetterIdx: 0,
+        rootAcc: 0,
+        inversion: 0
+      };
+    }
+
+    // ---------- 渲染（宽度自适应屏幕） ----------
+    function render() {
+      if (!current) return;
+      scoreEl.innerHTML = "";
+
+      const w = Math.max(240, scoreEl.clientWidth || 320);
+      const h = 170;
+
+      const renderer = new Renderer(scoreEl, Renderer.Backends.SVG);
+      renderer.resize(w, h);
+      const ctx = renderer.getContext();
+      ctx.setFont("Arial", 11);
+
+      const staveX = 8;
+      const staveW = w - 16;
+      const stave = new Stave(staveX, 38, staveW);
+      stave.addClef("treble");
+      stave.setContext(ctx).draw();
+
+      const keys = current.notes.map((n) => LETTERS[n.letterIdx] + "/" + n.octave);
+      const note = new StaveNote({ keys, duration: "w" });
+
+      current.notes.forEach((n, i) => {
+        const a = accVex(n.acc);
+        if (a) note.addModifier(new Accidental(a), i);
+      });
+
+      const voice = new Voice({ num_beats: 4, beat_value: 4 });
+      voice.setStrict(false);
+      voice.addTickables([note]);
+
+      const formatW = Math.max(80, staveW - 70);
+      new Formatter().joinVoices([voice]).format([voice], formatW);
+      voice.draw(ctx, stave);
+    }
+
+    // ---------- 答案 ----------
+    function row(label, value, big) {
+      return '<div class="row"><span class="k">' + label +
+             '</span><span class="v' + (big ? " big" : "") + '">' + value +
+             "</span></div>";
+    }
+
+    function revealAnswer() {
+      if (!current) return;
+      const { notes, quality, rootLetterIdx, rootAcc, inversion } = current;
+
+      const rootName = LETTER_NAMES[rootLetterIdx] + accSymbol(rootAcc);
+      const bassName = LETTER_NAMES[notes[0].letterIdx] + accSymbol(notes[0].acc);
+      const isTriad = notes.length === 3;
+
+      const invNames = isTriad
+        ? ["原位", "第一转位（六和弦）", "第二转位（四六和弦）"]
+        : ["原位", "第一转位（五六和弦）", "第二转位（三四和弦）", "第三转位（二和弦）"];
+
+      const fullName  = rootName + " " + quality.full + " · " + invNames[inversion];
+      const shortName = rootName + quality.short;
+      const altName   = quality.alt ? rootName + quality.alt : "";
+      const slashName = inversion > 0 ? shortName + "/" + bassName : "";
+      const tones = notes
+        .map((n) => LETTER_NAMES[n.letterIdx] + accSymbol(n.acc))
+        .join(" — ");
+
+      let html = "";
+      html += row("全名", fullName, true);
+      html += row("简写", shortName + (altName ? "（" + altName + "）" : ""), true);
+      if (inversion > 0) html += row("转位标记", slashName, false);
+      html += row("构成音", tones, false);
+      html += row("最低音", bassName, false);
+
+      answerEl.innerHTML = html;
+      answerEl.classList.remove("hidden");
+    }
+
+    function hideAnswer() {
+      answerEl.classList.add("hidden");
+      answerEl.innerHTML = "";
+    }
+
+    function nextChord() {
+      buildChord();
+      render();
+      hideAnswer();
+    }
+
+    document.getElementById("genBtn").addEventListener("click", nextChord);
+    document.getElementById("showBtn").addEventListener("click", revealAnswer);
+
+    // ---------- 屏幕尺寸变化（含横竖屏切换）时重新渲染 ----------
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { if (current) render(); }, 150);
+    });
+    // 横竖屏切换（部分浏览器触发不同事件）
+    window.addEventListener("orientationchange", () => {
+      setTimeout(() => { if (current) render(); }, 300);
+    });
+
+    // 桌面端键盘快捷键（手机无效，不影响使用）
+    document.addEventListener("keydown", (e) => {
+      if (e.target && e.target.tagName === "INPUT") return;
+      if (e.code === "Space") { e.preventDefault(); nextChord(); }
+      if (e.code === "Enter") { e.preventDefault(); revealAnswer(); }
+    });
+
+    // 首次渲染：等布局稳定后再画，避免 clientWidth 为 0
+    if (document.readyState === "complete") {
+      nextChord();
+    } else {
+      window.addEventListener("load", nextChord);
+    }
+  })();
+  </script>
+</body>
+</html>
