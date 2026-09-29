@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<!-- 关键：加入 viewport 元标签，禁止用户缩放页面导致布局错乱 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>随机单音符五线谱</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1e2235, #2b3350);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    color: #e8ecf5;
+    padding: 12px;
+    /* 防止移动端上下拉动刷新页面影响操作 */
+    overscroll-behavior: none;
+  }
+
+  .card {
+    background: #fdfdfb;
+    border-radius: 16px;
+    padding: 16px 16px 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+    width: 100%;
+    max-width: 480px;
+  }
+
+  h1 {
+    font-size: 16px;
+    margin: 0 0 4px;
+    color: #2b3350;
+    font-weight: 600;
+  }
+
+  .hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #8a92a8;
+    margin-bottom: 8px;
+  }
+
+  /* 关键：让 SVG 跟随容器宽度自适应缩放 */
+  #score {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  #score svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    border-top: 1px solid #e6e8ef;
+    padding-top: 12px;
+  }
+
+  button {
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 10px;
+    background: #3b6ef5;
+    color: #fff;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    flex: 1;                       /* 两个按钮等宽铺满 */
+    min-height: 46px;              /* 移动端友好的点击区域 */
+    touch-action: manipulation;    /* 消除 300ms 点击延迟 */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  button:hover { background: #2a58d6; }
+  button:active { transform: translateY(1px); background: #2a58d6; }
+
+  #btnNames { background: #1f9d6b; }
+  #btnNames:hover, #btnNames:active { background: #178057; }
+
+  .err {
+    color: #c0392b;
+    font-size: 13px;
+    padding: 8px 0;
+  }
+
+  /* 更小的手机屏幕（例如 iPhone SE 一代 320px 宽） */
+  @media (max-width: 360px) {
+    .card { padding: 14px 12px 10px; }
+    h1 { font-size: 15px; }
+    .hint { font-size: 11.5px; }
+    button { font-size: 14px; padding: 10px 14px; min-height: 44px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>随机单音符五线谱</h1>
+  <div class="hint">
+    每次随机出现高音或低音谱号，并生成一个全音符：<br>
+    高音 F3 ~ E6 · 低音 A1 ~ G4（上下加线 ≤ 3）
+  </div>
+  <div id="score"></div>
+  <div class="bar">
+    <button id="btnNew">换一个</button>
+    <button id="btnNames">显示音名</button>
+  </div>
+</div>
+
+<!-- VexFlow 4.2.2（unpkg CDN） -->
+<script src="https://unpkg.com/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const host     = document.getElementById('score');
+  const btnNew   = document.getElementById('btnNew');
+  const btnNames = document.getElementById('btnNames');
+
+  // 逻辑尺寸（用于绘制），实际显示尺寸由 CSS 自适应
+  const SVG_W   = 480;
+  const SVG_H   = 300;
+  const STAVE_X = 20;
+  const STAVE_Y = 90;
+  const STAVE_W = 440;
+
+  // ---- 高音谱表可选音高 ---------------------------------------------
+  const TREBLE_PITCHES = [
+    'f/3', 'g/3', 'a/3', 'b/3',
+    'c/4', 'd/4', 'e/4', 'f/4', 'g/4', 'a/4', 'b/4',
+    'c/5', 'd/5', 'e/5', 'f/5', 'g/5',
+    'a/5', 'b/5', 'c/6', 'd/6', 'e/6'
+  ];
+
+  // ---- 低音谱表可选音高（A1 ~ G4）-----------------------------------
+  const BASS_PITCHES = [
+    'a/1', 'b/1',
+    'c/2', 'd/2', 'e/2', 'f/2', 'g/2', 'a/2', 'b/2',
+    'c/3', 'd/3', 'e/3', 'f/3', 'g/3', 'a/3', 'b/3',
+    'c/4', 'd/4', 'e/4', 'f/4', 'g/4'
+  ];
+
+  let currentClef = 'treble';
+  let currentKey  = 'c/4';
+  let showNames   = false;
+
+  function keyToName(key) {
+    const p = key.split('/');
+    return p[0].toUpperCase() + p[1];
+  }
+
+  function pickOne(pool) {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function drawStaveLine(ctx, y, key, clef) {
+    const VF = Vex.Flow;
+
+    const stave = new VF.Stave(STAVE_X, y, STAVE_W);
+    stave.addClef(clef);
+    stave.setContext(ctx).draw();
+
+    const note = new VF.StaveNote({
+      keys: [key],
+      duration: 'w',
+      clef: clef
+    });
+
+    const voice = new VF.Voice({ num_beats: 4, beat_value: 4 });
+    voice.setStrict(false);
+    voice.addTickables([note]);
+
+    new VF.Formatter()
+      .joinVoices([voice])
+      .formatToStave([voice], stave);
+
+    voice.draw(ctx, stave);
+
+    return { note: note, stave: stave };
+  }
+
+  function drawNames(ctx, stave, note) {
+    const spacing = stave.getSpacingBetweenLines
+      ? stave.getSpacingBetweenLines()
+      : 10;
+
+    const baseY = stave.getYForLine(4) + 3 * spacing + 36;
+    const x = note.getAbsoluteX() + 7;
+
+    ctx.save();
+    ctx.setFont('Arial', 18, '');
+    ctx.setFillStyle('#c0392b');
+    if (ctx.setTextAlign) ctx.setTextAlign('center');
+    ctx.fillText(keyToName(note.getKeys()[0]), x, baseY);
+    ctx.restore();
+  }
+
+  /**
+   * 渲染完成后，为 SVG 添加 viewBox，
+   * 使其能随容器宽度等比缩放（手机端关键）
+   */
+  function makeSvgResponsive() {
+    const svg = host.querySelector('svg');
+    if (!svg) return;
+    svg.setAttribute('viewBox', '0 0 ' + SVG_W + ' ' + SVG_H);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.removeAttribute('width');
+    svg.removeAttribute('height');
+  }
+
+  function render() {
+    if (typeof Vex === 'undefined' || !Vex.Flow) {
+      host.innerHTML = '<p class="err">VexFlow 加载失败，请检查网络后刷新页面。</p>';
+      return;
+    }
+
+    const VF = Vex.Flow;
+    host.innerHTML = '';
+
+    const renderer = new VF.Renderer(host, VF.Renderer.Backends.SVG);
+    renderer.resize(SVG_W, SVG_H);
+    const ctx = renderer.getContext();
+
+    const line = drawStaveLine(ctx, STAVE_Y, currentKey, currentClef);
+
+    if (showNames) {
+      drawNames(ctx, line.stave, line.note);
+    }
+
+    // 让 SVG 自适应容器宽度
+    makeSvgResponsive();
+  }
+
+  function newScore() {
+    currentClef = Math.random() < 0.5 ? 'treble' : 'bass';
+    const pool  = currentClef === 'treble' ? TREBLE_PITCHES : BASS_PITCHES;
+    currentKey  = pickOne(pool);
+
+    showNames = false;
+    btnNames.textContent = '显示音名';
+
+    render();
+  }
+
+  btnNew.addEventListener('click', newScore);
+
+  btnNames.addEventListener('click', function () {
+    showNames = !showNames;
+    this.textContent = showNames ? '隐藏音名' : '显示音名';
+    render();
+  });
+
+  newScore();
+})();
+</script>
+</body>
+</html>
