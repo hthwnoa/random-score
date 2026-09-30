@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>我的音乐工具</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1e2235, #2b3350);
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    padding: 24px;
+    overscroll-behavior: none;
+  }
+  .menu {
+    background: #fdfdfb;
+    border-radius: 16px;
+    padding: 28px 24px 20px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .45);
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 22px;
+    color: #2b3350;
+    text-align: center;
+    font-weight: 600;
+  }
+  a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: #3b6ef5;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    text-align: center;
+    transition: background .15s, transform .1s;
+    min-height: 54px;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  a:hover, a:active { background: #2a58d6; }
+  a:active { transform: translateY(1px); }
+
+  a.chord { background: #1f9d6b; }
+  a.chord:hover, a.chord:active { background: #178057; }
+
+  @media (max-width: 360px) {
+    .menu { padding: 22px 18px 14px; }
+    h1 { font-size: 18px; }
+    a { font-size: 15px; min-height: 50px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="menu">
+  <h1>🎵 我的音乐工具</h1>
+  <a href="./score.html">随机五线谱生成器</a>
+  <a href="./chord.html" class="chord">和弦生成器</a>
+</div>
+
+</body>
+</html>
